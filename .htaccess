@@ -1,0 +1,4 @@
+DirectoryIndex index.php index.html
+
+RewriteEngine On
+RewriteRule ^admin/?$ /admin/index.php [L]
