@@ -8,6 +8,25 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 
 $dbConfig = require __DIR__ . '/../config/database.php';
 
+function sqlite_database_path(): string
+{
+    $directory = __DIR__ . '/../uploads';
+
+    if (!is_dir($directory)) {
+        mkdir($directory, 0775, true);
+    }
+
+    return $directory . '/jobyaari-temp.sqlite';
+}
+
+function create_pdo(string $dsn, ?string $username = null, ?string $password = null): PDO
+{
+    return new PDO($dsn, $username, $password, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    ]);
+}
+
 function db_connection(array $config): PDO
 {
     static $pdo = null;
@@ -24,12 +43,19 @@ function db_connection(array $config): PDO
         $config['charset']
     );
 
-    $pdo = new PDO($dsn, $config['username'], $config['password'], [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    ]);
+    try {
+        $pdo = create_pdo($dsn, $config['username'], $config['password']);
+    } catch (PDOException $exception) {
+        // Temporary fallback for environments where MySQL is not ready yet.
+        $pdo = create_pdo('sqlite:' . sqlite_database_path());
+    }
 
     return $pdo;
+}
+
+function db_driver(PDO $pdo): string
+{
+    return (string) $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
 }
 
 function e(?string $value): string
@@ -118,19 +144,123 @@ function render_blog_card(array $blog): string
     ';
 }
 
+function ensure_admins_table(PDO $pdo): void
+{
+    if (db_driver($pdo) === 'sqlite') {
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS admins (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                password TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )'
+        );
+
+        return;
+    }
+
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS admins (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            email VARCHAR(120) NOT NULL UNIQUE,
+            password VARCHAR(255) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
+    );
+}
+
+function ensure_blogs_table(PDO $pdo): void
+{
+    if (db_driver($pdo) === 'sqlite') {
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS blogs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                slug TEXT NOT NULL UNIQUE,
+                category TEXT NOT NULL,
+                short_description TEXT NOT NULL,
+                content TEXT NOT NULL,
+                image TEXT DEFAULT NULL,
+                published_at TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )'
+        );
+
+        return;
+    }
+
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS blogs (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            title VARCHAR(255) NOT NULL,
+            slug VARCHAR(255) NOT NULL UNIQUE,
+            category VARCHAR(100) NOT NULL,
+            short_description TEXT NOT NULL,
+            content LONGTEXT NOT NULL,
+            image VARCHAR(255) DEFAULT NULL,
+            published_at DATETIME NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
+    );
+}
+
 function ensure_comments_table(PDO $pdo): void
 {
+    if (db_driver($pdo) === 'sqlite') {
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS comments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                blog_id INTEGER NOT NULL,
+                author_name TEXT NOT NULL,
+                comment_body TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )'
+        );
+
+        return;
+    }
+
     $pdo->exec(
         'CREATE TABLE IF NOT EXISTS comments (
             id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
             blog_id INT UNSIGNED NOT NULL,
             author_name VARCHAR(120) NOT NULL,
-            browser_name VARCHAR(120) DEFAULT NULL,
             comment_body TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_comments_blog_id (blog_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
     );
+}
+
+function seed_admin(PDO $pdo): void
+{
+    $email = 'admin@jobyaari.com';
+    $passwordHash = 'ac2bb70ca8e094bbcf05a8d864937390d3b71cb3d25271c33ac278cef90ba384';
+    $statement = $pdo->prepare('SELECT id FROM admins WHERE email = :email LIMIT 1');
+    $statement->execute(['email' => $email]);
+    $admin = $statement->fetch();
+
+    if ($admin) {
+        $update = $pdo->prepare('UPDATE admins SET name = :name, password = :password WHERE email = :email');
+        $update->execute([
+            'name' => 'Admin User',
+            'email' => $email,
+            'password' => $passwordHash,
+        ]);
+
+        return;
+    }
+
+    $insert = $pdo->prepare('INSERT INTO admins (name, email, password) VALUES (:name, :email, :password)');
+    $insert->execute([
+        'name' => 'Admin User',
+        'email' => $email,
+        'password' => $passwordHash,
+    ]);
 }
 
 function seed_blogs(PDO $pdo): void
@@ -146,21 +276,37 @@ function seed_blogs(PDO $pdo): void
         ['title' => 'State PSC Interview Round Checklist', 'slug' => 'state-psc-interview-round-checklist', 'category' => 'General', 'short_description' => 'A practical checklist to help candidates prepare for state PSC interview rounds with confidence.', 'content' => '<p>Interview preparation should cover current affairs, your academic background, and role-specific questions.</p><p>Practice short structured answers and keep your documents organized in advance.</p>', 'image' => 'https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=1200&q=80', 'published_at' => '2026-04-20 13:05:00'],
     ];
 
-    $statement = $pdo->prepare(
+    $find = $pdo->prepare('SELECT id FROM blogs WHERE slug = :slug LIMIT 1');
+    $insert = $pdo->prepare(
         'INSERT INTO blogs (title, slug, category, short_description, content, image, published_at, created_at, updated_at)
-         VALUES (:title, :slug, :category, :short_description, :content, :image, :published_at, NOW(), NOW())
-         ON DUPLICATE KEY UPDATE
-         title = VALUES(title),
-         category = VALUES(category),
-         short_description = VALUES(short_description),
-         content = VALUES(content),
-         image = VALUES(image),
-         published_at = VALUES(published_at),
-         updated_at = NOW()'
+         VALUES (:title, :slug, :category, :short_description, :content, :image, :published_at, :created_at, :updated_at)'
+    );
+    $update = $pdo->prepare(
+        'UPDATE blogs
+         SET title = :title,
+             category = :category,
+             short_description = :short_description,
+             content = :content,
+             image = :image,
+             published_at = :published_at,
+             updated_at = :updated_at
+         WHERE slug = :slug'
     );
 
     foreach ($seedBlogs as $blog) {
-        $statement->execute($blog);
+        $find->execute(['slug' => $blog['slug']]);
+        $existing = $find->fetch();
+        $payload = $blog + [
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s'),
+        ];
+
+        if ($existing) {
+            $update->execute($payload);
+            continue;
+        }
+
+        $insert->execute($payload);
     }
 }
 
@@ -183,5 +329,8 @@ function save_blog_comment(PDO $pdo, int $blogId, string $authorName, string $co
 }
 
 $pdo = db_connection($dbConfig);
+ensure_admins_table($pdo);
+ensure_blogs_table($pdo);
 ensure_comments_table($pdo);
+seed_admin($pdo);
 seed_blogs($pdo);
