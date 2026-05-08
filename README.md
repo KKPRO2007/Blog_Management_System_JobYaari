@@ -1,26 +1,19 @@
 # JobYaari Blog Management System
 
-PHP/MySQL Blog Management System built for the JobYaari developer assessment. It includes a public blog listing page, blog detail page, admin login, blog CRUD, and AJAX filtering with jQuery.
+A PHP + MySQL blog management system with:
 
-## Features
+- public blog listing
+- AJAX search, category, and date filtering
+- blog detail pages
+- admin login and blog CRUD
+- Docker-based deployment for Render
 
-- Public blog listing page backed by MySQL
-- Blog detail page for full content
-- Live search with jQuery AJAX
-- AJAX category filter without page reload
-- AJAX date range filter without page reload
-- Responsive layout for mobile and laptop
-- Admin login with PHP sessions
-- Admin can add, edit, and delete blogs
-- Image support via URL or local upload
+## Stack
 
-## Tech Stack
-
-- PHP
+- PHP 8
 - MySQL
-- HTML5
-- CSS3
 - jQuery / AJAX
+- Docker
 
 ## Project Structure
 
@@ -30,92 +23,76 @@ ajax/
 assets/
 config/
 database/
+docker/
 includes/
 uploads/
+.env.example
+Dockerfile
+render.yaml
 index.php
 blog.php
 ```
 
-## Installation
+## Local Setup
 
-### Option 1: XAMPP
+1. Install XAMPP or Laragon.
+2. Create a MySQL database named `blog_management_system`.
+3. Import [database/blog_management_system.sql](/d:/Blog_Management_System_JobYaari/database/blog_management_system.sql).
+4. Open the app:
+- `http://localhost/Blog_Management_System_JobYaari/`
 
-1. Install `XAMPP`.
-2. Copy this project folder into `C:\xampp\htdocs\`.
-3. Open the XAMPP Control Panel and start `Apache` and `MySQL`.
-4. Visit `http://localhost/phpmyadmin`.
-5. Create a database named `blog_management_system`.
-6. Import [`database/blog_management_system.sql`](database/blog_management_system.sql).
-7. Open [`config/database.php`](config/database.php) and confirm these values match your local MySQL setup:
-   - `host`
-   - `port`
-   - `database`
-   - `username`
-   - `password`
-8. Open the project in your browser:
-   - `http://localhost/Blog_Management_System_JobYaari/`
+## Render Deployment
 
-### Option 2: Laragon
+This repo is prepared for Render with:
 
-1. Install `Laragon`.
-2. Copy this project folder into `C:\laragon\www\`.
-3. Start `Apache` and `MySQL` from Laragon.
-4. Open `http://localhost/phpmyadmin`.
-5. Create a database named `blog_management_system`.
-6. Import [`database/blog_management_system.sql`](database/blog_management_system.sql).
-7. Open [`config/database.php`](config/database.php) and update the database credentials if needed.
-8. Open the project in your browser:
-   - `http://localhost/Blog_Management_System_JobYaari/`
+- [Dockerfile](/d:/Blog_Management_System_JobYaari/Dockerfile)
+- [render.yaml](/d:/Blog_Management_System_JobYaari/render.yaml)
+- [config/database.php](/d:/Blog_Management_System_JobYaari/config/database.php)
 
-### Final Checks
+### 1. Create the web app
 
-1. Make sure the `uploads/` folder is writable.
-2. Visit the homepage and confirm blogs are loading from the database.
-3. Visit the admin login page and test blog create, edit, and delete.
+1. Push this repo to GitHub.
+2. In Render, create a new `Web Service`.
+3. Choose runtime `Docker`.
+4. Render can use the included `Dockerfile`.
 
-## Admin Login
+### 2. Create MySQL on Render
 
-- URL: `/admin/index.php`
-- Email: `admin@jobyaari.com`
-- Password: `jobyaari123`
+Create a `Private Service` for MySQL using Render's MySQL guide:
 
-## AJAX Filtering
+- https://render.com/docs/deploy-mysql
+- https://render.com/templates/mysql
 
-The public homepage uses jQuery AJAX to fetch filtered blog results from [`ajax/blogs.php`](ajax/blogs.php) without reloading the page.
+Use these MySQL values if you want the app to work with the built-in Render fallback and no manual DB env setup on the web service:
 
-Supported filters:
+Important:
 
-- Search by title, category, or short description
-- Filter by category
-- Filter by date range
+- Name the MySQL private service `mysql`
+- Add a persistent disk mounted at `/var/lib/mysql`
+- Keep the MySQL service in the same Render workspace and region as the web app
 
-## Database Notes
+### 3. Import the database
 
-- Seeded admin account is included in the SQL file.
-- Sample blog posts are included for demo/testing.
-- Uploaded images are stored in `uploads/`.
+Import [database/blog_management_system.sql](/d:/Blog_Management_System_JobYaari/database/blog_management_system.sql) into your Render MySQL instance.
 
-## Deployment Notes
+### 4. Open the site
 
-This project is suitable for free PHP/MySQL hosting such as:
+After deploy:
 
-- InfinityFree
-- 000webhost
-- Render with PHP support
+- Home: `https://your-service-name.onrender.com/`
+- Admin: `https://your-service-name.onrender.com/admin/index.php`
 
-Before deployment:
+## Admin Access
 
-1. Import the SQL file on the live database.
-2. Update `config/database.php` with live database credentials.
-3. Confirm the `uploads/` directory is writable.
-4. Share the live home URL, GitHub repo URL, and admin login credentials in your submission.
+The seeded admin account is created from the SQL file. Change it before real production use.
 
-## Important Files
+Admin route:
 
-- Public homepage: [`index.php`](index.php)
-- Blog detail page: [`blog.php`](blog.php)
-- AJAX filter endpoint: [`ajax/blogs.php`](ajax/blogs.php)
-- Admin login: [`admin/index.php`](admin/index.php)
-- Admin dashboard and CRUD UI: [`admin/dashboard.php`](admin/dashboard.php)
-- Blog save handler: [`admin/blog-save.php`](admin/blog-save.php)
-- SQL schema and seed data: [`database/blog_management_system.sql`](database/blog_management_system.sql)
+- `/admin/index.php`
+
+## Notes
+
+- `uploads/` must be writable
+- The app reads environment variables from [config/database.php](/d:/Blog_Management_System_JobYaari/config/database.php)
+- Render Docker startup is handled by [docker/apache/render-port.sh](/d:/Blog_Management_System_JobYaari/docker/apache/render-port.sh)
+- The public homepage uses AJAX via [ajax/blogs.php](/d:/Blog_Management_System_JobYaari/ajax/blogs.php)

@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: jobyaari-blog
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    envVars:
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "3306"
+      - key: DB_NAME
+        value: blog_management_system
+      - key: DB_USER
+        sync: false
+      - key: DB_PASS
+        sync: false
+      - key: DB_CHARSET
+        value: utf8mb4
+      - key: APP_ENV
+        value: production
+      - key: TZ
+        value: Asia/Calcutta
