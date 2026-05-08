@@ -296,17 +296,20 @@ function seed_blogs(PDO $pdo): void
     foreach ($seedBlogs as $blog) {
         $find->execute(['slug' => $blog['slug']]);
         $existing = $find->fetch();
-        $payload = $blog + [
+        $insertPayload = $blog + [
             'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s'),
+        ];
+        $updatePayload = $blog + [
             'updated_at' => date('Y-m-d H:i:s'),
         ];
 
         if ($existing) {
-            $update->execute($payload);
+            $update->execute($updatePayload);
             continue;
         }
 
-        $insert->execute($payload);
+        $insert->execute($insertPayload);
     }
 }
 
